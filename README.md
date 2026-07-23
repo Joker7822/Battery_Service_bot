@@ -62,13 +62,18 @@ schedule:
 
 ## 宣材画像
 
-`assets/`に3種類のJPEG画像を保存しています。
+今回指定された4種類の宣材画像を使用します。
 
-- `post_01.jpg`
-- `post_02.jpg`
-- `post_03.jpg`
+- `assets/post_01.jpg`
+- `assets/post_02.jpg`
+- `assets/post_03.jpg`
+- `assets/post_04.jpg`
 
-投稿ごとに使用画像は`config/posts.json`で指定します。
+画像のBase64ソースは`assets/encoded/`に分割保存し、`scripts/materialize_images.py`がJPEGを復元します。GitHub Actionsは実行時に画像を復元し、内容が変わった場合は`assets/post_01.jpg`〜`post_04.jpg`を自動更新します。
+
+投稿ごとの使用画像は`config/posts.json`で指定します。8種類の投稿文全体で4画像がローテーションされます。
+
+リポジトリ版はGitHub Actionsとスマートフォン通知で扱いやすいように最適化した軽量JPEGです。
 
 ## 生成物
 
@@ -90,6 +95,7 @@ YYYY-MM-DD_<post-id>.jpg
 ## ローカル確認
 
 ```bash
+python scripts/materialize_images.py
 python -m unittest discover -s tests -v
 python scripts/prepare_post.py --date 2026-07-24 --index 3
 ```
