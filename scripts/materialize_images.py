@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,7 +28,7 @@ def materialize_images() -> list[Path]:
         )
         try:
             image_data = base64.b64decode(encoded, validate=True)
-        except (ValueError, base64.binascii.Error) as exc:
+        except (ValueError, binascii.Error) as exc:
             raise RuntimeError(f"Invalid Base64 image source: {stem}") from exc
 
         if not image_data.startswith(b"\xff\xd8") or not image_data.endswith(b"\xff\xd9"):
