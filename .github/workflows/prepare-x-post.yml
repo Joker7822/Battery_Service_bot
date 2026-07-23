@@ -1,0 +1,107 @@
+name: Prepare Daily X Post
+
+on:
+  workflow_dispatch:
+    inputs:
+      post_index:
+        description: "投稿番号（1〜8、空欄は日付で自動選択）"
+        required: false
+        type: string
+      create_issue:
+        description: "スマートフォン通知用Issueを作成する"
+        required: true
+        default: true
+        type: boolean
+  schedule:
+    - cron: "17 9 * * *"
+      timezone: "Asia/Tokyo"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: battery-service-epic-daily-x-post
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare post and notify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Prepare post package
+        id: prepare
+        env:
+          POST_INDEX: ${{ inputs.post_index }}
+        run: |
+          set -euo pipefail
+          args=(--output output)
+          if [ -n "${POST_INDEX:-}" ]; then
+            args+=(--index "$POST_INDEX")
+          fi
+          python scripts/prepare_post.py "${args[@]}"
+
+      - name: Upload post package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prepare.outputs.artifact_name }}
+          path: output/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create labels when missing
+        if: ${{ github.event_name == 'schedule' || inputs.create_issue == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh label create "x-post-ready" \
+            --repo "$GITHUB_REPOSITORY" \
+            --color "1D76DB" \
+            --description "手動投稿できるX投稿セットが準備済み" \
+            2>/dev/null || true
+
+      - name: Create smartphone notification issue
+        if: ${{ github.event_name == 'schedule' || inputs.create_issue == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: ${{ steps.prepare.outputs.issue_title }}
+        run: |
+          set -euo pipefail
+
+          existing="$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state all \
+            --search "${ISSUE_TITLE} in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == env.ISSUE_TITLE) | .number" \
+            | head -n 1)"
+
+          if [ -n "$existing" ]; then
+            echo "Issue #$existing already exists; duplicate notification skipped."
+            exit 0
+          fi
+
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$ISSUE_TITLE" \
+            --body-file output/issue_body.md \
+            --label "x-post-ready" \
+            --assignee "Joker7822"
+
+      - name: Job summary
+        run: |
+          cat output/issue_body.md >> "$GITHUB_STEP_SUMMARY"
