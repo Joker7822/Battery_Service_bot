@@ -1,6 +1,15 @@
 name: Prepare Daily X Post
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "assets/encoded/**"
+      - "config/posts.json"
+      - "scripts/materialize_images.py"
+      - "tests/**"
+      - ".github/workflows/prepare-x-post.yml"
   workflow_dispatch:
     inputs:
       post_index:
@@ -17,7 +26,7 @@ on:
       timezone: "Asia/Tokyo"
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 concurrency:
@@ -33,11 +42,31 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Materialize promotional images
+        run: python scripts/materialize_images.py
+
+      - name: Commit materialized promotional images
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/post_01.jpg assets/post_02.jpg assets/post_03.jpg assets/post_04.jpg
+
+          if git diff --cached --quiet; then
+            echo "Promotional images are already current."
+          else
+            git commit -m "Update promotional images [skip ci]"
+            git pull --rebase --autostash origin "$GITHUB_REF_NAME"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
 
       - name: Run tests
         run: python -m unittest discover -s tests -v
